@@ -1,4 +1,4 @@
-readme_content = """# 🎲 Mi Ludoteca - Gestor de Juegos de Mesa
+# 🎲 Mi Ludoteca - Gestor de Juegos de Mesa
 
 ![GitHub release](https://img.shields.io/badge/Release-v1.1.0-indigo?style=for-the-badge)
 ![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
