@@ -15,7 +15,7 @@
     <!-- Encabezado -->
     <header class="text-center mb-8">
       <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-indigo-400">🎲 Mi Ludoteca</h1>
-      <p class="text-slate-400 mt-2">Busca en BoardGameGeek o agrega tus juegos manualmente.</p>
+      <p class="text-slate-400 mt-2">Busca en BoardGameGeek o gestiona tus juegos de mesa sincronizados en la nube.</p>
     </header>
 
     <!-- Formulario con Buscador BGG -->
@@ -26,12 +26,12 @@
       <div class="mb-6 bg-slate-900/60 p-4 rounded-xl border border-indigo-500/30">
         <label class="block text-xs font-bold uppercase text-indigo-400 mb-2">🔍 Buscar en BoardGameGeek</label>
         <div class="flex gap-2">
-          <input type="text" id="bgg-search-input" placeholder="Ej. Wingspan, Catan, Ticket to Ride..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+          <input type="text" id="bgg-search-input" placeholder="Ej. Wingspan, Catan, Stone Age..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
           <button type="button" onclick="searchBGG()" id="bgg-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg transition duration-200 text-sm whitespace-nowrap">
             Buscar
           </button>
         </div>
-        <!-- Resultados de búsqueda -->
+        <!-- Resultados de búsqueda BGG -->
         <div id="bgg-results" class="hidden mt-3 max-h-48 overflow-y-auto bg-slate-800 rounded-lg border border-slate-700 divide-y divide-slate-700/50"></div>
       </div>
 
@@ -62,15 +62,17 @@
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-bold text-slate-200">Colección (<span id="game-count">0</span>)</h2>
         <div id="loading-spinner" class="hidden text-indigo-400 text-sm font-semibold animate-pulse">
-          ⏳ Sincronizando...
+          ⏳ Sincronizando con la nube...
         </div>
       </div>
 
+      <!-- Grid de tarjetas -->
       <div id="games-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
 
+      <!-- Estado vacío -->
       <div id="empty-state" class="hidden text-center py-16 bg-slate-800/50 rounded-2xl border border-dashed border-slate-700">
         <p class="text-slate-400 text-lg">No tienes juegos registrados aún.</p>
-        <p class="text-slate-500 text-sm mt-1">Usa el buscador de BGG o el formulario para agregar el primero.</p>
+        <p class="text-slate-500 text-sm mt-1">Usa el buscador de BGG o el formulario de arriba para agregar el primero.</p>
       </div>
     </main>
   </div>
@@ -91,6 +93,32 @@
 
     let games = [];
 
+    // --- FUNCIÓN ROBUSTA DE PROXY CON FALLBACK PARA BGG ---
+    async function fetchWithProxy(targetUrl) {
+      const proxies = [
+        (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        (url) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+        (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`
+      ];
+
+      let lastError = null;
+      for (const getProxyUrl of proxies) {
+        try {
+          const proxyUrl = getProxyUrl(targetUrl);
+          const response = await fetch(proxyUrl);
+          if (!response.ok) throw new Error(`HTTP status ${response.status}`);
+          const text = await response.text();
+          if (text && text.trim().length > 0) {
+            return text;
+          }
+        } catch (err) {
+          console.warn(`Proxy falló, intentando siguiente... (${err.message})`);
+          lastError = err;
+        }
+      }
+      throw lastError || new Error("No se pudo conectar con la API de BoardGameGeek.");
+    }
+
     // --- INTEGRACIÓN CON BOARDGAMEGEEK (BGG) ---
     async function searchBGG() {
       const query = document.getElementById('bgg-search-input').value.trim();
@@ -105,14 +133,9 @@
       resultsDiv.classList.remove('hidden');
 
       try {
-        // Proxy para evitar CORS + URL BGG Search API
-        const proxy = 'https://corsproxy.io/?';
-        const url = `${proxy}${encodeURIComponent(`https://boardgamegeek.com/xmlapi2/search?type=boardgame&query=${query}`)}`;
+        const bggUrl = `https://boardgamegeek.com/xmlapi2/search?type=boardgame&query=${encodeURIComponent(query)}`;
+        const xmlText = await fetchWithProxy(bggUrl);
         
-        const response = await fetch(url);
-        const xmlText = await response.text();
-        
-        // Parsear el XML que entrega BGG
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(xmlText, "text/xml");
         const items = xmlDoc.getElementsByTagName("item");
@@ -120,7 +143,6 @@
         if (items.length === 0) {
           resultsDiv.innerHTML = '<div class="p-3 text-xs text-slate-400">No se encontraron juegos.</div>';
         } else {
-          // Mostrar los primeros 5 resultados
           const maxResults = Math.min(items.length, 5);
           for (let i = 0; i < maxResults; i++) {
             const id = items[i].getAttribute("id");
@@ -142,32 +164,27 @@
         }
       } catch (err) {
         console.error("Error BGG:", err);
-        resultsDiv.innerHTML = '<div class="p-3 text-xs text-red-400">Error al conectar con BGG.</div>';
+        resultsDiv.innerHTML = '<div class="p-3 text-xs text-red-400">Error al conectar con BGG. Reintenta en unos segundos.</div>';
       } finally {
         bggBtn.innerText = 'Buscar';
         bggBtn.disabled = false;
       }
     }
 
-    // Obtener detalles (imagen) del juego seleccionado en BGG
     async function selectBGGGame(id, name) {
       const resultsDiv = document.getElementById('bgg-results');
       resultsDiv.innerHTML = '<div class="p-3 text-xs text-indigo-400">Obteniendo carátula...</div>';
 
       try {
-        const proxy = 'https://corsproxy.io/?';
-        const url = `${proxy}${encodeURIComponent(`https://boardgamegeek.com/xmlapi2/thing?id=${id}`)}`;
-        
-        const response = await fetch(url);
-        const xmlText = await response.text();
+        const bggUrl = `https://boardgamegeek.com/xmlapi2/thing?id=${id}`;
+        const xmlText = await fetchWithProxy(bggUrl);
+
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(xmlText, "text/xml");
         
-        // Extraer la URL de la imagen en alta calidad o miniatura
         const imageEl = xmlDoc.getElementsByTagName("image")[0] || xmlDoc.getElementsByTagName("thumbnail")[0];
         const imageUrl = imageEl ? imageEl.textContent : '';
 
-        // Auto-completar el formulario
         document.getElementById('title').value = name;
         document.getElementById('image').value = imageUrl;
         
@@ -301,6 +318,7 @@
       }
     }
 
+    // Cargar colección al iniciar
     fetchGames();
   </script>
 </body>
