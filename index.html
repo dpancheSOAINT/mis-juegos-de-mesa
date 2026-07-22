@@ -12,27 +12,32 @@
 <body class="bg-slate-900 text-slate-100 min-h-screen p-4 sm:p-8 font-sans">
 
   <div class="max-w-6xl mx-auto">
-    <!-- Encabezado -->
+    <!-- Encabezado con estado de conexión -->
     <header class="text-center mb-8">
-      <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-indigo-400">🎲 Mi Ludoteca</h1>
-      <p class="text-slate-400 mt-2">Busca en BoardGameGeek o gestiona tus juegos de mesa sincronizados en la nube.</p>
+      <div class="flex items-center justify-center gap-3">
+        <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-indigo-400">🎲 Mi Ludoteca</h1>
+        <span id="storage-status" class="text-xs px-2.5 py-1 rounded-full font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+          Comprobando...
+        </span>
+      </div>
+      <p class="text-slate-400 mt-2">Busca en BoardGameGeek o gestiona tus juegos de mesa.</p>
     </header>
 
-    <!-- Formulario con Buscador BGG -->
+    <!-- Formulario con Buscador BGG e híbrido local -->
     <div class="bg-slate-800 p-6 rounded-2xl shadow-xl mb-10 border border-slate-700">
       <h2 class="text-xl font-bold mb-4 text-slate-200">➕ Agregar nuevo juego</h2>
       
       <!-- Buscador BGG -->
       <div class="mb-6 bg-slate-900/60 p-4 rounded-xl border border-indigo-500/30">
-        <label class="block text-xs font-bold uppercase text-indigo-400 mb-2">🔍 Buscar en BoardGameGeek</label>
+        <label class="block text-xs font-bold uppercase text-indigo-400 mb-2">🔍 Buscar juego (BGG / Catálogo)</label>
         <div class="flex gap-2">
-          <input type="text" id="bgg-search-input" placeholder="Ej. Wingspan, Catan, Stone Age..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+          <input type="text" id="bgg-search-input" placeholder="Ej. Wingspan, Catan, Stone Age, 7 Wonders..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500" onkeydown="if(event.key==='Enter'){event.preventDefault();searchBGG();}">
           <button type="button" onclick="searchBGG()" id="bgg-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg transition duration-200 text-sm whitespace-nowrap">
             Buscar
           </button>
         </div>
         <!-- Resultados de búsqueda BGG -->
-        <div id="bgg-results" class="hidden mt-3 max-h-48 overflow-y-auto bg-slate-800 rounded-lg border border-slate-700 divide-y divide-slate-700/50"></div>
+        <div id="bgg-results" class="hidden mt-3 max-h-56 overflow-y-auto bg-slate-800 rounded-lg border border-slate-700 divide-y divide-slate-700/50"></div>
       </div>
 
       <!-- Formulario principal -->
@@ -62,7 +67,7 @@
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-bold text-slate-200">Colección (<span id="game-count">0</span>)</h2>
         <div id="loading-spinner" class="hidden text-indigo-400 text-sm font-semibold animate-pulse">
-          ⏳ Sincronizando con la nube...
+          ⏳ Procesando...
         </div>
       </div>
 
@@ -72,16 +77,51 @@
       <!-- Estado vacío -->
       <div id="empty-state" class="hidden text-center py-16 bg-slate-800/50 rounded-2xl border border-dashed border-slate-700">
         <p class="text-slate-400 text-lg">No tienes juegos registrados aún.</p>
-        <p class="text-slate-500 text-sm mt-1">Usa el buscador de BGG o el formulario de arriba para agregar el primero.</p>
+        <p class="text-slate-500 text-sm mt-1">Usa el buscador o el formulario de arriba para agregar el primero.</p>
       </div>
     </main>
   </div>
 
   <script>
+    // Catálogo popular pre-cargado para garantizar respuesta instantánea
+    const POPULAR_GAMES = [
+      { id: '13', name: 'Catan', year: '1995', image: 'https://images.unsplash.com/photo-1611891487122-207579d67d98?auto=format&fit=crop&q=80&w=600' },
+      { id: '822', name: 'Carcassonne', year: '2000', image: 'https://images.unsplash.com/photo-1606167668584-78701c57f13d?auto=format&fit=crop&q=80&w=600' },
+      { id: '9209', name: 'Ticket to Ride (Aventureros al Tren)', year: '2004', image: 'https://images.unsplash.com/photo-1544650039-22886fbb4323?auto=format&fit=crop&q=80&w=600' },
+      { id: '266192', name: 'Wingspan', year: '2019', image: 'https://images.unsplash.com/photo-1511193311914-0346f16efe90?auto=format&fit=crop&q=80&w=600' },
+      { id: '167791', name: 'Terraforming Mars', year: '2016', image: 'https://images.unsplash.com/photo-1614728894747-a83421e2b9c9?auto=format&fit=crop&q=80&w=600' },
+      { id: '30549', name: 'Pandemic', year: '2008', image: 'https://images.unsplash.com/photo-1584036561566-baf8f5f1b144?auto=format&fit=crop&q=80&w=600' },
+      { id: '230802', name: 'Azul', year: '2017', image: 'https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&q=80&w=600' },
+      { id: '68448', name: '7 Wonders', year: '2010', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?auto=format&fit=crop&q=80&w=600' },
+      { id: '173346', name: '7 Wonders Duel', year: '2015', image: 'https://images.unsplash.com/photo-1541701494587-cb58502866ab?auto=format&fit=crop&q=80&w=600' },
+      { id: '148228', name: 'Splendor', year: '2014', image: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&q=80&w=600' },
+      { id: '174430', name: 'Gloomhaven', year: '2017', image: 'https://images.unsplash.com/photo-1511193311914-0346f16efe90?auto=format&fit=crop&q=80&w=600' },
+      { id: '39856', name: 'Dixit', year: '2008', image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&q=80&w=600' },
+      { id: '34635', name: 'Stone Age', year: '2008', image: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&q=80&w=600' },
+      { id: '224515', name: 'Brass: Birmingham', year: '2018', image: 'https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&q=80&w=600' },
+      { id: '233078', name: 'Everdell', year: '2018', image: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&q=80&w=600' },
+      { id: '316554', name: 'Dune: Imperium', year: '2020', image: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&q=80&w=600' },
+      { id: '342942', name: 'Ark Nova', year: '2021', image: 'https://images.unsplash.com/photo-1511193311914-0346f16efe90?auto=format&fit=crop&q=80&w=600' },
+      { id: '178900', name: 'Codenames (Código Secreto)', year: '2015', image: 'https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?auto=format&fit=crop&q=80&w=600' },
+      { id: '141052', name: 'Monopoly', year: '1935', image: 'https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?auto=format&fit=crop&q=80&w=600' },
+      { id: '181', name: 'Risk', year: '1959', image: 'https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?auto=format&fit=crop&q=80&w=600' }
+    ];
+
     // CONFIGURACIÓN DE SUPABASE
     const SUPABASE_URL = 'https://jzgszgkmndzwhwmsothq.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_VWXU-_mTIm-D8AGgHtm8IA_V-DDWp5w';
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    let isSupabaseConfigured = false;
+    let supabaseClient = null;
+
+    if (SUPABASE_URL && !SUPABASE_URL.includes('TU-PROYECTO') && typeof supabase !== 'undefined') {
+      try {
+        supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        isSupabaseConfigured = true;
+      } catch (e) {
+        console.warn("Supabase no configurado, usando LocalStorage.");
+      }
+    }
 
     // DOM
     const gameForm = document.getElementById('game-form');
@@ -90,10 +130,21 @@
     const gameCount = document.getElementById('game-count');
     const loadingSpinner = document.getElementById('loading-spinner');
     const submitBtn = document.getElementById('submit-btn');
+    const storageStatus = document.getElementById('storage-status');
 
     let games = [];
 
-    // --- FUNCIÓN ROBUSTA DE PROXY CON FALLBACK PARA BGG ---
+    function updateStorageBadge(useCloud) {
+      if (useCloud) {
+        storageStatus.textContent = '☁️ Nube (Supabase)';
+        storageStatus.className = 'text-xs px-2.5 py-1 rounded-full font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+      } else {
+        storageStatus.textContent = '💾 Modo Local (localStorage)';
+        storageStatus.className = 'text-xs px-2.5 py-1 rounded-full font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20';
+      }
+    }
+
+    // Proxy BGG
     async function fetchWithProxy(targetUrl) {
       const proxies = [
         (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
@@ -101,33 +152,26 @@
         (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`
       ];
 
-      let lastError = null;
       for (const getProxyUrl of proxies) {
         try {
-          const proxyUrl = getProxyUrl(targetUrl);
-          // Timeout de 6 segundos por proxy para evitar demoras
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 6000);
-          
-          const response = await fetch(proxyUrl, { signal: controller.signal });
+          const timeoutId = setTimeout(() => controller.abort(), 4000);
+          const response = await fetch(getProxyUrl(targetUrl), { signal: controller.signal });
           clearTimeout(timeoutId);
 
-          if (!response.ok) throw new Error(`HTTP status ${response.status}`);
+          if (!response.ok) continue;
           const text = await response.text();
-          
-          // Verificar que hayamos recibido un XML válido de BGG
           if (text && (text.includes('<items') || text.includes('<item') || text.includes('<boardgame'))) {
             return text;
           }
         } catch (err) {
-          console.warn(`Proxy falló, intentando siguiente... (${err.message})`);
-          lastError = err;
+          // Intentar el siguiente proxy en silencio
         }
       }
-      throw lastError || new Error("No se pudo conectar con la API de BoardGameGeek.");
+      return null;
     }
 
-    // --- INTEGRACIÓN CON BOARDGAMEGEEK (BGG) ---
+    // Buscador híbrido BGG + Catálogo Local
     async function searchBGG() {
       const query = document.getElementById('bgg-search-input').value.trim();
       const bggBtn = document.getElementById('bgg-btn');
@@ -140,79 +184,122 @@
       resultsDiv.innerHTML = '';
       resultsDiv.classList.remove('hidden');
 
+      const lowerQuery = query.toLowerCase();
+      
+      // 1. Buscar coincidencias en catálogo local integrado
+      const localMatches = POPULAR_GAMES.filter(g => g.name.toLowerCase().includes(lowerQuery));
+      
+      // 2. Buscar en la API de BGG
+      let onlineItems = [];
       try {
         const bggUrl = `https://boardgamegeek.com/xmlapi2/search?type=boardgame&query=${encodeURIComponent(query)}`;
         const xmlText = await fetchWithProxy(bggUrl);
         
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-        const items = xmlDoc.getElementsByTagName("item");
-
-        if (items.length === 0) {
-          resultsDiv.innerHTML = '<div class="p-3 text-xs text-slate-400">No se encontraron juegos en BGG.</div>';
-        } else {
-          const maxResults = Math.min(items.length, 5);
-          for (let i = 0; i < maxResults; i++) {
+        if (xmlText) {
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+          const items = xmlDoc.getElementsByTagName("item");
+          
+          for (let i = 0; i < Math.min(items.length, 5); i++) {
             const id = items[i].getAttribute("id");
             const nameEl = items[i].getElementsByTagName("name")[0];
             const name = nameEl ? nameEl.getAttribute("value") : "Sin nombre";
             const yearEl = items[i].getElementsByTagName("yearpublished")[0];
-            const year = yearEl ? `(${yearEl.getAttribute("value")})` : "";
-
-            const row = document.createElement('div');
-            row.className = 'p-3 hover:bg-slate-700/60 cursor-pointer flex justify-between items-center transition text-sm';
-            row.innerHTML = `
-              <span class="font-medium text-slate-200">${name} <small class="text-slate-400">${year}</small></span>
-              <button type="button" onclick="selectBGGGame('${id}', '${escapeQuotes(name)}')" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-2.5 py-1 rounded font-semibold">
-                Seleccionar
-              </button>
-            `;
-            resultsDiv.appendChild(row);
+            const year = yearEl ? yearEl.getAttribute("value") : "";
+            
+            // Evitar duplicados con el catálogo local
+            if (!localMatches.some(lm => lm.name.toLowerCase() === name.toLowerCase())) {
+              onlineItems.push({ id, name, year, isOnline: true });
+            }
           }
         }
-      } catch (err) {
-        console.error("Error BGG:", err);
-        // Si BGG o los proxies no responden, asignamos el nombre al formulario automáticamente
-        document.getElementById('title').value = query;
-        resultsDiv.innerHTML = `
-          <div class="p-3 text-xs text-amber-400">
-            ⚠️ No se pudo conectar a BGG en este momento. Se ha asignado "${query}" al nombre del juego abajo para que puedas agregarlo manualmente.
-          </div>`;
-      } finally {
-        bggBtn.innerText = 'Buscar';
-        bggBtn.disabled = false;
+      } catch (e) {
+        console.warn("BGG API no disponible, usando catálogo local.");
       }
+
+      // 3. Renderizar combinados
+      const allResults = [
+        ...localMatches.map(m => ({ id: m.id, name: m.name, year: m.year, image: m.image, isLocal: true })),
+        ...onlineItems
+      ];
+
+      if (allResults.length === 0) {
+        resultsDiv.innerHTML = `
+          <div class="p-3 text-xs text-slate-300 flex justify-between items-center">
+            <span>No se encontraron portadas para "${query}".</span>
+            <button type="button" onclick="useDirectName('${escapeQuotes(query)}')" class="bg-indigo-600 hover:bg-indigo-500 text-white px-2.5 py-1 rounded font-semibold text-xs">
+              Usar nombre
+            </button>
+          </div>
+        `;
+      } else {
+        allResults.forEach(item => {
+          const row = document.createElement('div');
+          row.className = 'p-3 hover:bg-slate-700/60 cursor-pointer flex justify-between items-center transition text-sm';
+          
+          const badge = item.isLocal ? '<span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded ml-1">Rápido</span>' : '';
+          const yearStr = item.year ? `(${item.year})` : '';
+
+          row.innerHTML = `
+            <span class="font-medium text-slate-200">${item.name} <small class="text-slate-400">${yearStr}</small> ${badge}</span>
+            <button type="button" onclick="selectGameResult('${item.id}', '${escapeQuotes(item.name)}', '${item.image || ''}')" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-2.5 py-1 rounded font-semibold">
+              Seleccionar
+            </button>
+          `;
+          resultsDiv.appendChild(row);
+        });
+      }
+
+      bggBtn.innerText = 'Buscar';
+      bggBtn.disabled = false;
     }
 
-    async function selectBGGGame(id, name) {
+    async function selectGameResult(id, name, localImage) {
       const resultsDiv = document.getElementById('bgg-results');
-      resultsDiv.innerHTML = '<div class="p-3 text-xs text-indigo-400">Obteniendo carátula...</div>';
+
+      // Si tenemos imagen del catálogo local
+      if (localImage) {
+        document.getElementById('title').value = name;
+        document.getElementById('image').value = localImage;
+        resultsDiv.classList.add('hidden');
+        return;
+      }
+
+      // Si viene de BGG online, traer carátula
+      resultsDiv.innerHTML = '<div class="p-3 text-xs text-indigo-400">Obteniendo carátula desde BGG...</div>';
 
       try {
         const bggUrl = `https://boardgamegeek.com/xmlapi2/thing?id=${id}`;
         const xmlText = await fetchWithProxy(bggUrl);
 
-        const parser = new DOMParser();
-        const xmlDoc = parser.parseFromString(xmlText, "text/xml");
-        
-        const imageEl = xmlDoc.getElementsByTagName("image")[0] || xmlDoc.getElementsByTagName("thumbnail")[0];
-        const imageUrl = imageEl ? imageEl.textContent : '';
+        let imageUrl = '';
+        if (xmlText) {
+          const parser = new DOMParser();
+          const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+          const imageEl = xmlDoc.getElementsByTagName("image")[0] || xmlDoc.getElementsByTagName("thumbnail")[0];
+          if (imageEl) imageUrl = imageEl.textContent;
+        }
 
         document.getElementById('title').value = name;
-        document.getElementById('image').value = imageUrl;
-        
+        document.getElementById('image').value = imageUrl || 'https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=500';
         resultsDiv.classList.add('hidden');
       } catch (err) {
-        console.error("Error detalles BGG:", err);
-        alert("No se pudo obtener la imagen del juego.");
+        document.getElementById('title').value = name;
+        document.getElementById('image').value = 'https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=500';
+        resultsDiv.classList.add('hidden');
       }
+    }
+
+    function useDirectName(name) {
+      document.getElementById('title').value = name;
+      document.getElementById('image').value = 'https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=500';
+      document.getElementById('bgg-results').classList.add('hidden');
     }
 
     function escapeQuotes(str) {
       return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
     }
 
-    // --- FUNCIONES SUPABASE & RENDER ---
     function setLoading(isLoading) {
       if (isLoading) loadingSpinner.classList.remove('hidden');
       else loadingSpinner.classList.add('hidden');
@@ -220,17 +307,45 @@
 
     async function fetchGames() {
       setLoading(true);
-      const { data, error } = await supabaseClient
-        .from('juegos')
-        .select('*')
-        .order('id', { ascending: false });
 
-      setLoading(false);
-      if (error) {
-        console.error('Error Supabase:', error);
-        return;
+      if (isSupabaseConfigured) {
+        try {
+          const { data, error } = await supabaseClient
+            .from('juegos')
+            .select('*')
+            .order('id', { ascending: false });
+
+          if (!error && data) {
+            games = data.map(g => ({
+              id: g.id,
+              title: g.title,
+              image: g.image,
+              last_played: g.last_played
+            }));
+            updateStorageBadge(true);
+            setLoading(false);
+            renderGames();
+            return;
+          }
+        } catch (e) {
+          console.warn("Fallo de red al conectar con Supabase. Cambiando a LocalStorage.");
+        }
       }
-      games = data || [];
+
+      // Fallback a LocalStorage
+      isSupabaseConfigured = false;
+      updateStorageBadge(false);
+      const localData = localStorage.getItem('my_board_games');
+      games = localData ? JSON.parse(localData) : [
+        { id: 1, title: 'Catan', image: 'https://images.unsplash.com/photo-1611891487122-207579d67d98?auto=format&fit=crop&q=80&w=400', last_played: '2025-01-10' },
+        { id: 2, title: 'Carcassonne', image: 'https://images.unsplash.com/photo-1606167668584-78701c57f13d?auto=format&fit=crop&q=80&w=400', last_played: '2025-01-15' }
+      ];
+      setLoading(false);
+      renderGames();
+    }
+
+    function saveLocalGames() {
+      localStorage.setItem('my_board_games', JSON.stringify(games));
       renderGames();
     }
 
@@ -250,7 +365,6 @@
           card.innerHTML = `
             <div>
               <div class="h-48 overflow-hidden bg-slate-900 relative">
-                <!-- Portada alineada con object-top -->
                 <img src="${game.image}" alt="${game.title}" class="w-full h-full object-cover object-top" onerror="this.src='https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=500'">
               </div>
               <div class="p-4">
@@ -297,13 +411,27 @@
       const newDate = document.getElementById(`date-input-${id}`).value;
       if (!newDate) return;
       setLoading(true);
-      const { error } = await supabaseClient.from('juegos').update({ last_played: newDate }).eq('id', id);
-      if (!error) await fetchGames();
+
+      if (isSupabaseConfigured) {
+        try {
+          const { error } = await supabaseClient.from('juegos').update({ last_played: newDate }).eq('id', id);
+          if (!error) {
+            await fetchGames();
+            return;
+          }
+        } catch (e) {}
+      }
+
+      // Local fallback
+      const game = games.find(g => g.id === id);
+      if (game) game.last_played = newDate;
+      setLoading(false);
+      saveLocalGames();
     }
 
     gameForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const newGame = {
+      const newGameData = {
         title: document.getElementById('title').value,
         image: document.getElementById('image').value,
         last_played: document.getElementById('lastPlayed').value
@@ -313,25 +441,50 @@
       submitBtn.innerText = 'Guardando...';
       setLoading(true);
 
-      const { error } = await supabaseClient.from('juegos').insert([newGame]);
+      if (isSupabaseConfigured) {
+        try {
+          const { error } = await supabaseClient.from('juegos').insert([newGameData]);
+          if (!error) {
+            gameForm.reset();
+            submitBtn.disabled = false;
+            submitBtn.innerText = 'Guardar Juego';
+            await fetchGames();
+            return;
+          }
+        } catch (e) {}
+      }
+
+      // Local fallback
+      games.unshift({ id: Date.now(), ...newGameData });
       submitBtn.disabled = false;
       submitBtn.innerText = 'Guardar Juego';
-
-      if (!error) {
-        gameForm.reset();
-        await fetchGames();
-      }
+      setLoading(false);
+      gameForm.reset();
+      saveLocalGames();
     });
 
     async function deleteGame(id) {
       if (confirm('¿Seguro que deseas eliminar este juego?')) {
         setLoading(true);
-        const { error } = await supabaseClient.from('juegos').delete().eq('id', id);
-        if (!error) await fetchGames();
+
+        if (isSupabaseConfigured) {
+          try {
+            const { error } = await supabaseClient.from('juegos').delete().eq('id', id);
+            if (!error) {
+              await fetchGames();
+              return;
+            }
+          } catch (e) {}
+        }
+
+        // Local fallback
+        games = games.filter(g => g.id !== id);
+        setLoading(false);
+        saveLocalGames();
       }
     }
 
-    // Cargar colección al iniciar
+    // Inicializar app
     fetchGames();
   </script>
 </body>
