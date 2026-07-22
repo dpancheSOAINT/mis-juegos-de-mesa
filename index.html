@@ -6,14 +6,16 @@
   <title>Mi Ludoteca - Mis Juegos de Mesa</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Supabase JS Client CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen p-4 sm:p-8 font-sans">
 
   <div class="max-w-6xl mx-auto">
     <!-- Encabezado -->
     <header class="text-center mb-8">
-      <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-indigo-400">🎲 Mi Ludoteca</h1>
-      <p class="text-slate-400 mt-2">Administra tus juegos de mesa y actualiza cuándo los jugaste.</p>
+      <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-indigo-400">🎲 Mi Ludoteca (Nube)</h1>
+      <p class="text-slate-400 mt-2">Administra tus juegos de mesa con sincronización en tiempo real vía Supabase.</p>
     </header>
 
     <!-- Formulario para agregar juegos -->
@@ -30,11 +32,10 @@
         </div>
         <div>
           <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Última vez jugado</label>
-          <!-- Input de fecha configurado para abrir el popup del calendario -->
           <input type="date" id="lastPlayed" required onclick="this.showPicker && this.showPicker()" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500 cursor-pointer">
         </div>
         <div class="md:col-span-3 flex justify-end mt-2">
-          <button type="submit" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-6 rounded-lg transition duration-200 shadow-md hover:shadow-indigo-500/20">
+          <button type="submit" id="submit-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-6 rounded-lg transition duration-200 shadow-md hover:shadow-indigo-500/20">
             Guardar Juego
           </button>
         </div>
@@ -45,6 +46,9 @@
     <main>
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-bold text-slate-200">Colección (<span id="game-count">0</span>)</h2>
+        <div id="loading-spinner" class="hidden text-indigo-400 text-sm font-semibold animate-pulse">
+          ⏳ Sincronizando con la nube...
+        </div>
       </div>
 
       <!-- Grid donde se renderizan las tarjetas -->
@@ -54,22 +58,62 @@
 
       <!-- Estado vacío -->
       <div id="empty-state" class="hidden text-center py-16 bg-slate-800/50 rounded-2xl border border-dashed border-slate-700">
-        <p class="text-slate-400 text-lg">No tienes juegos registrados aún.</p>
+        <p class="text-slate-400 text-lg">No tienes juegos registrados aún en la base de datos.</p>
         <p class="text-slate-500 text-sm mt-1">Usa el formulario de arriba para agregar el primero.</p>
       </div>
     </main>
   </div>
 
   <script>
+    // -------------------------------------------------------------
+    // CONFIGURACIÓN DE SUPABASE
+    // Reemplaza los siguientes valores por los de tu proyecto Supabase:
+    // -------------------------------------------------------------
+    const SUPABASE_URL = 'https://jzgszgkmndzwhwmsothq.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_VWXU-_mTIm-D8AGgHtm8IA_V-DDWp5w';
+
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    // Referencias al DOM
     const gameForm = document.getElementById('game-form');
     const gamesGrid = document.getElementById('games-grid');
     const emptyState = document.getElementById('empty-state');
     const gameCount = document.getElementById('game-count');
+    const loadingSpinner = document.getElementById('loading-spinner');
+    const submitBtn = document.getElementById('submit-btn');
 
-    // Cargar juegos desde localStorage
-    let games = JSON.parse(localStorage.getItem('my_board_games')) || [];
+    let games = [];
 
-    // Renderizar tarjetas
+    // Mostrar/Ocultar indicador de carga
+    function setLoading(isLoading) {
+      if (isLoading) {
+        loadingSpinner.classList.remove('hidden');
+      } else {
+        loadingSpinner.classList.add('hidden');
+      }
+    }
+
+    // Cargar juegos desde Supabase
+    async function fetchGames() {
+      setLoading(true);
+      const { data, error } = await supabaseClient
+        .from('juegos')
+        .select('*')
+        .order('id', { ascending: false });
+
+      setLoading(false);
+
+      if (error) {
+        console.error('Error al cargar juegos desde Supabase:', error);
+        alert('Hubo un error al conectar con Supabase. Revisa las credenciales e historial de consola.');
+        return;
+      }
+
+      games = data || [];
+      renderGames();
+    }
+
+    // Renderizar tarjetas en pantalla
     function renderGames() {
       gamesGrid.innerHTML = '';
       gameCount.textContent = games.length;
@@ -79,7 +123,7 @@
       } else {
         emptyState.classList.add('hidden');
         
-        games.forEach((game, index) => {
+        games.forEach((game) => {
           const card = document.createElement('div');
           card.className = 'bg-slate-800 rounded-xl overflow-hidden shadow-lg border border-slate-700 flex flex-col justify-between hover:border-slate-600 transition duration-200';
           
@@ -95,22 +139,22 @@
                 <div class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-700/50">
                   <div class="flex items-center justify-between text-xs mb-1">
                     <span class="text-slate-400">📅 Última partida:</span>
-                    <button onclick="toggleEditDate(${index})" class="text-indigo-400 hover:text-indigo-300 font-semibold underline">
+                    <button onclick="toggleEditDate(${game.id})" class="text-indigo-400 hover:text-indigo-300 font-semibold underline">
                       Editar
                     </button>
                   </div>
-                  <div id="date-display-${index}" class="text-sm font-semibold text-indigo-300">
-                    ${game.lastPlayed}
+                  <div id="date-display-${game.id}" class="text-sm font-semibold text-indigo-300">
+                    ${game.last_played}
                   </div>
                   
-                  <!-- Formulario desplegable para cambiar la fecha -->
-                  <div id="date-edit-container-${index}" class="hidden mt-2">
-                    <input type="date" id="date-input-${index}" value="${game.lastPlayed}" onclick="this.showPicker && this.showPicker()" class="w-full bg-slate-800 border border-indigo-500 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none cursor-pointer mb-2">
+                  <!-- Formulario desplegable para cambiar fecha -->
+                  <div id="date-edit-container-${game.id}" class="hidden mt-2">
+                    <input type="date" id="date-input-${game.id}" value="${game.last_played}" onclick="this.showPicker && this.showPicker()" class="w-full bg-slate-800 border border-indigo-500 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none cursor-pointer mb-2">
                     <div class="flex gap-2">
-                      <button onclick="saveNewDate(${index})" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-1 px-2 rounded">
+                      <button onclick="saveNewDate(${game.id})" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-1 px-2 rounded">
                         Guardar
                       </button>
-                      <button onclick="toggleEditDate(${index})" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs py-1 px-2 rounded">
+                      <button onclick="toggleEditDate(${game.id})" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs py-1 px-2 rounded">
                         Cancelar
                       </button>
                     </div>
@@ -120,7 +164,7 @@
               </div>
             </div>
             <div class="p-4 pt-0">
-              <button onclick="deleteGame(${index})" class="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold py-1.5 px-3 rounded-lg text-sm border border-red-500/20 transition duration-150">
+              <button onclick="deleteGame(${game.id})" class="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 font-semibold py-1.5 px-3 rounded-lg text-sm border border-red-500/20 transition duration-150">
                 Eliminar
               </button>
             </div>
@@ -130,10 +174,10 @@
       }
     }
 
-    // Mostrar/Ocultar el campo de edición de fecha en cada tarjeta
-    function toggleEditDate(index) {
-      const editContainer = document.getElementById(`date-edit-container-${index}`);
-      const dateDisplay = document.getElementById(`date-display-${index}`);
+    // Mostrar/Ocultar el editor de fecha por juego
+    function toggleEditDate(id) {
+      const editContainer = document.getElementById(`date-edit-container-${id}`);
+      const dateDisplay = document.getElementById(`date-display-${id}`);
       
       if (editContainer.classList.contains('hidden')) {
         editContainer.classList.remove('hidden');
@@ -144,46 +188,77 @@
       }
     }
 
-    // Guardar la nueva fecha editada
-    function saveNewDate(index) {
-      const newDate = document.getElementById(`date-input-${index}`).value;
-      if (newDate) {
-        games[index].lastPlayed = newDate;
-        saveGames();
+    // Guardar una fecha nueva en Supabase
+    async function saveNewDate(id) {
+      const newDate = document.getElementById(`date-input-${id}`).value;
+      if (!newDate) return;
+
+      setLoading(true);
+      const { error } = await supabaseClient
+        .from('juegos')
+        .update({ last_played: newDate })
+        .eq('id', id);
+
+      if (error) {
+        console.error('Error al actualizar fecha:', error);
+        alert('No se pudo actualizar la fecha en Supabase.');
+      } else {
+        await fetchGames();
       }
     }
 
-    // Guardar lista en localStorage y refrescar la vista
-    function saveGames() {
-      localStorage.setItem('my_board_games', JSON.stringify(games));
-      renderGames();
-    }
-
-    // Agregar un juego nuevo
-    gameForm.addEventListener('submit', (e) => {
+    // Insertar un juego nuevo en Supabase
+    gameForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       
       const newGame = {
         title: document.getElementById('title').value,
         image: document.getElementById('image').value,
-        lastPlayed: document.getElementById('lastPlayed').value
+        last_played: document.getElementById('lastPlayed').value
       };
 
-      games.unshift(newGame);
-      saveGames();
-      gameForm.reset();
+      submitBtn.disabled = true;
+      submitBtn.innerText = 'Guardando...';
+      setLoading(true);
+
+      const { error } = await supabaseClient
+        .from('juegos')
+        .insert([newGame]);
+
+      submitBtn.disabled = false;
+      submitBtn.innerText = 'Guardar Juego';
+
+      if (error) {
+        console.error('Error al insertar juego:', error);
+        alert('No se pudo agregar el juego.');
+        setLoading(false);
+      } else {
+        gameForm.reset();
+        await fetchGames();
+      }
     });
 
-    // Eliminar un juego
-    function deleteGame(index) {
-      if (confirm('¿Seguro que deseas eliminar este juego de tu lista?')) {
-        games.splice(index, 1);
-        saveGames();
+    // Eliminar un juego en Supabase
+    async function deleteGame(id) {
+      if (confirm('¿Seguro que deseas eliminar este juego de la base de datos?')) {
+        setLoading(true);
+        const { error } = await supabaseClient
+          .from('juegos')
+          .delete()
+          .eq('id', id);
+
+        if (error) {
+          console.error('Error al eliminar juego:', error);
+          alert('No se pudo eliminar el juego.');
+          setLoading(false);
+        } else {
+          await fetchGames();
+        }
       }
     }
 
-    // Cargar la app al iniciar
-    renderGames();
+    // Inicializar carga de datos al abrir la página
+    fetchGames();
   </script>
 </body>
 </html>
