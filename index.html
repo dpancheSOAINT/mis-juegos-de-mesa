@@ -105,10 +105,18 @@
       for (const getProxyUrl of proxies) {
         try {
           const proxyUrl = getProxyUrl(targetUrl);
-          const response = await fetch(proxyUrl);
+          // Timeout de 6 segundos por proxy para evitar demoras
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 6000);
+          
+          const response = await fetch(proxyUrl, { signal: controller.signal });
+          clearTimeout(timeoutId);
+
           if (!response.ok) throw new Error(`HTTP status ${response.status}`);
           const text = await response.text();
-          if (text && text.trim().length > 0) {
+          
+          // Verificar que hayamos recibido un XML válido de BGG
+          if (text && (text.includes('<items') || text.includes('<item') || text.includes('<boardgame'))) {
             return text;
           }
         } catch (err) {
@@ -141,7 +149,7 @@
         const items = xmlDoc.getElementsByTagName("item");
 
         if (items.length === 0) {
-          resultsDiv.innerHTML = '<div class="p-3 text-xs text-slate-400">No se encontraron juegos.</div>';
+          resultsDiv.innerHTML = '<div class="p-3 text-xs text-slate-400">No se encontraron juegos en BGG.</div>';
         } else {
           const maxResults = Math.min(items.length, 5);
           for (let i = 0; i < maxResults; i++) {
@@ -164,7 +172,12 @@
         }
       } catch (err) {
         console.error("Error BGG:", err);
-        resultsDiv.innerHTML = '<div class="p-3 text-xs text-red-400">Error al conectar con BGG. Reintenta en unos segundos.</div>';
+        // Si BGG o los proxies no responden, asignamos el nombre al formulario automáticamente
+        document.getElementById('title').value = query;
+        resultsDiv.innerHTML = `
+          <div class="p-3 text-xs text-amber-400">
+            ⚠️ No se pudo conectar a BGG en este momento. Se ha asignado "${query}" al nombre del juego abajo para que puedas agregarlo manualmente.
+          </div>`;
       } finally {
         bggBtn.innerText = 'Buscar';
         bggBtn.disabled = false;
