@@ -14,13 +14,28 @@
   <div class="max-w-6xl mx-auto">
     <!-- Encabezado -->
     <header class="text-center mb-8">
-      <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-indigo-400">🎲 Mi Ludoteca (Nube)</h1>
-      <p class="text-slate-400 mt-2">Administra tus juegos de mesa con sincronización en tiempo real vía Supabase.</p>
+      <h1 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-indigo-400">🎲 Mi Ludoteca</h1>
+      <p class="text-slate-400 mt-2">Busca en BoardGameGeek o agrega tus juegos manualmente.</p>
     </header>
 
-    <!-- Formulario para agregar juegos -->
+    <!-- Formulario con Buscador BGG -->
     <div class="bg-slate-800 p-6 rounded-2xl shadow-xl mb-10 border border-slate-700">
       <h2 class="text-xl font-bold mb-4 text-slate-200">➕ Agregar nuevo juego</h2>
+      
+      <!-- Buscador BGG -->
+      <div class="mb-6 bg-slate-900/60 p-4 rounded-xl border border-indigo-500/30">
+        <label class="block text-xs font-bold uppercase text-indigo-400 mb-2">🔍 Buscar en BoardGameGeek</label>
+        <div class="flex gap-2">
+          <input type="text" id="bgg-search-input" placeholder="Ej. Wingspan, Catan, Ticket to Ride..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+          <button type="button" onclick="searchBGG()" id="bgg-btn" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg transition duration-200 text-sm whitespace-nowrap">
+            Buscar
+          </button>
+        </div>
+        <!-- Resultados de búsqueda -->
+        <div id="bgg-results" class="hidden mt-3 max-h-48 overflow-y-auto bg-slate-800 rounded-lg border border-slate-700 divide-y divide-slate-700/50"></div>
+      </div>
+
+      <!-- Formulario principal -->
       <form id="game-form" class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Nombre del juego</label>
@@ -28,7 +43,7 @@
         </div>
         <div>
           <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">URL de la Portada</label>
-          <input type="url" id="image" required placeholder="https://ejemplo.com/imagen.jpg" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
+          <input type="url" id="image" required placeholder="https://..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-slate-100 focus:outline-none focus:border-indigo-500">
         </div>
         <div>
           <label class="block text-xs font-semibold uppercase text-slate-400 mb-1">Última vez jugado</label>
@@ -47,34 +62,26 @@
       <div class="flex justify-between items-center mb-6">
         <h2 class="text-2xl font-bold text-slate-200">Colección (<span id="game-count">0</span>)</h2>
         <div id="loading-spinner" class="hidden text-indigo-400 text-sm font-semibold animate-pulse">
-          ⏳ Sincronizando con la nube...
+          ⏳ Sincronizando...
         </div>
       </div>
 
-      <!-- Grid donde se renderizan las tarjetas -->
-      <div id="games-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        <!-- Las tarjetas se insertan dinámicamente -->
-      </div>
+      <div id="games-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
 
-      <!-- Estado vacío -->
       <div id="empty-state" class="hidden text-center py-16 bg-slate-800/50 rounded-2xl border border-dashed border-slate-700">
-        <p class="text-slate-400 text-lg">No tienes juegos registrados aún en la base de datos.</p>
-        <p class="text-slate-500 text-sm mt-1">Usa el formulario de arriba para agregar el primero.</p>
+        <p class="text-slate-400 text-lg">No tienes juegos registrados aún.</p>
+        <p class="text-slate-500 text-sm mt-1">Usa el buscador de BGG o el formulario para agregar el primero.</p>
       </div>
     </main>
   </div>
 
   <script>
-    // -------------------------------------------------------------
     // CONFIGURACIÓN DE SUPABASE
-    // Reemplaza los siguientes valores por los de tu proyecto Supabase:
-    // -------------------------------------------------------------
     const SUPABASE_URL = 'https://jzgszgkmndzwhwmsothq.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_VWXU-_mTIm-D8AGgHtm8IA_V-DDWp5w';
-
     const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Referencias al DOM
+    // DOM
     const gameForm = document.getElementById('game-form');
     const gamesGrid = document.getElementById('games-grid');
     const emptyState = document.getElementById('empty-state');
@@ -84,16 +91,103 @@
 
     let games = [];
 
-    // Mostrar/Ocultar indicador de carga
-    function setLoading(isLoading) {
-      if (isLoading) {
-        loadingSpinner.classList.remove('hidden');
-      } else {
-        loadingSpinner.classList.add('hidden');
+    // --- INTEGRACIÓN CON BOARDGAMEGEEK (BGG) ---
+    async function searchBGG() {
+      const query = document.getElementById('bgg-search-input').value.trim();
+      const bggBtn = document.getElementById('bgg-btn');
+      const resultsDiv = document.getElementById('bgg-results');
+
+      if (!query) return;
+
+      bggBtn.innerText = 'Buscando...';
+      bggBtn.disabled = true;
+      resultsDiv.innerHTML = '';
+      resultsDiv.classList.remove('hidden');
+
+      try {
+        // Proxy para evitar CORS + URL BGG Search API
+        const proxy = 'https://corsproxy.io/?';
+        const url = `${proxy}${encodeURIComponent(`https://boardgamegeek.com/xmlapi2/search?type=boardgame&query=${query}`)}`;
+        
+        const response = await fetch(url);
+        const xmlText = await response.text();
+        
+        // Parsear el XML que entrega BGG
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+        const items = xmlDoc.getElementsByTagName("item");
+
+        if (items.length === 0) {
+          resultsDiv.innerHTML = '<div class="p-3 text-xs text-slate-400">No se encontraron juegos.</div>';
+        } else {
+          // Mostrar los primeros 5 resultados
+          const maxResults = Math.min(items.length, 5);
+          for (let i = 0; i < maxResults; i++) {
+            const id = items[i].getAttribute("id");
+            const nameEl = items[i].getElementsByTagName("name")[0];
+            const name = nameEl ? nameEl.getAttribute("value") : "Sin nombre";
+            const yearEl = items[i].getElementsByTagName("yearpublished")[0];
+            const year = yearEl ? `(${yearEl.getAttribute("value")})` : "";
+
+            const row = document.createElement('div');
+            row.className = 'p-3 hover:bg-slate-700/60 cursor-pointer flex justify-between items-center transition text-sm';
+            row.innerHTML = `
+              <span class="font-medium text-slate-200">${name} <small class="text-slate-400">${year}</small></span>
+              <button type="button" onclick="selectBGGGame('${id}', '${escapeQuotes(name)}')" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-2.5 py-1 rounded font-semibold">
+                Seleccionar
+              </button>
+            `;
+            resultsDiv.appendChild(row);
+          }
+        }
+      } catch (err) {
+        console.error("Error BGG:", err);
+        resultsDiv.innerHTML = '<div class="p-3 text-xs text-red-400">Error al conectar con BGG.</div>';
+      } finally {
+        bggBtn.innerText = 'Buscar';
+        bggBtn.disabled = false;
       }
     }
 
-    // Cargar juegos desde Supabase
+    // Obtener detalles (imagen) del juego seleccionado en BGG
+    async function selectBGGGame(id, name) {
+      const resultsDiv = document.getElementById('bgg-results');
+      resultsDiv.innerHTML = '<div class="p-3 text-xs text-indigo-400">Obteniendo carátula...</div>';
+
+      try {
+        const proxy = 'https://corsproxy.io/?';
+        const url = `${proxy}${encodeURIComponent(`https://boardgamegeek.com/xmlapi2/thing?id=${id}`)}`;
+        
+        const response = await fetch(url);
+        const xmlText = await response.text();
+        const parser = new DOMParser();
+        const xmlDoc = parser.parseFromString(xmlText, "text/xml");
+        
+        // Extraer la URL de la imagen en alta calidad o miniatura
+        const imageEl = xmlDoc.getElementsByTagName("image")[0] || xmlDoc.getElementsByTagName("thumbnail")[0];
+        const imageUrl = imageEl ? imageEl.textContent : '';
+
+        // Auto-completar el formulario
+        document.getElementById('title').value = name;
+        document.getElementById('image').value = imageUrl;
+        
+        resultsDiv.classList.add('hidden');
+      } catch (err) {
+        console.error("Error detalles BGG:", err);
+        alert("No se pudo obtener la imagen del juego.");
+      }
+    }
+
+    function escapeQuotes(str) {
+      return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    // --- FUNCIONES SUPABASE & RENDER ---
+    function setLoading(isLoading) {
+      if (isLoading) loadingSpinner.classList.remove('hidden');
+      else loadingSpinner.classList.add('hidden');
+    }
+
     async function fetchGames() {
       setLoading(true);
       const { data, error } = await supabaseClient
@@ -102,18 +196,14 @@
         .order('id', { ascending: false });
 
       setLoading(false);
-
       if (error) {
-        console.error('Error al cargar juegos desde Supabase:', error);
-        alert('Hubo un error al conectar con Supabase. Revisa las credenciales e historial de consola.');
+        console.error('Error Supabase:', error);
         return;
       }
-
       games = data || [];
       renderGames();
     }
 
-    // Renderizar tarjetas en pantalla
     function renderGames() {
       gamesGrid.innerHTML = '';
       gameCount.textContent = games.length;
@@ -130,12 +220,11 @@
           card.innerHTML = `
             <div>
               <div class="h-48 overflow-hidden bg-slate-900 relative">
-              <img src="${game.image}" alt="${game.title}" class="w-full h-full object-cover object-top" onerror="...">
+                <!-- Portada alineada con object-top -->
+                <img src="${game.image}" alt="${game.title}" class="w-full h-full object-cover object-top" onerror="this.src='https://images.unsplash.com/photo-1610890716171-6b1bb98ffd09?w=500'">
               </div>
               <div class="p-4">
                 <h3 class="text-lg font-bold text-slate-100 truncate mb-2">${game.title}</h3>
-                
-                <!-- Sección para ver y editar la fecha -->
                 <div class="bg-slate-900/80 p-2.5 rounded-lg border border-slate-700/50">
                   <div class="flex items-center justify-between text-xs mb-1">
                     <span class="text-slate-400">📅 Última partida:</span>
@@ -146,21 +235,14 @@
                   <div id="date-display-${game.id}" class="text-sm font-semibold text-indigo-300">
                     ${game.last_played}
                   </div>
-                  
-                  <!-- Formulario desplegable para cambiar fecha -->
                   <div id="date-edit-container-${game.id}" class="hidden mt-2">
                     <input type="date" id="date-input-${game.id}" value="${game.last_played}" onclick="this.showPicker && this.showPicker()" class="w-full bg-slate-800 border border-indigo-500 rounded px-2 py-1 text-xs text-slate-100 focus:outline-none cursor-pointer mb-2">
                     <div class="flex gap-2">
-                      <button onclick="saveNewDate(${game.id})" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-1 px-2 rounded">
-                        Guardar
-                      </button>
-                      <button onclick="toggleEditDate(${game.id})" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs py-1 px-2 rounded">
-                        Cancelar
-                      </button>
+                      <button onclick="saveNewDate(${game.id})" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold py-1 px-2 rounded">Guardar</button>
+                      <button onclick="toggleEditDate(${game.id})" class="w-full bg-slate-700 hover:bg-slate-600 text-slate-300 text-xs py-1 px-2 rounded">Cancelar</button>
                     </div>
                   </div>
                 </div>
-
               </div>
             </div>
             <div class="p-4 pt-0">
@@ -174,43 +256,23 @@
       }
     }
 
-    // Mostrar/Ocultar el editor de fecha por juego
     function toggleEditDate(id) {
       const editContainer = document.getElementById(`date-edit-container-${id}`);
       const dateDisplay = document.getElementById(`date-display-${id}`);
-      
-      if (editContainer.classList.contains('hidden')) {
-        editContainer.classList.remove('hidden');
-        dateDisplay.classList.add('hidden');
-      } else {
-        editContainer.classList.add('hidden');
-        dateDisplay.classList.remove('hidden');
-      }
+      editContainer.classList.toggle('hidden');
+      dateDisplay.classList.toggle('hidden');
     }
 
-    // Guardar una fecha nueva en Supabase
     async function saveNewDate(id) {
       const newDate = document.getElementById(`date-input-${id}`).value;
       if (!newDate) return;
-
       setLoading(true);
-      const { error } = await supabaseClient
-        .from('juegos')
-        .update({ last_played: newDate })
-        .eq('id', id);
-
-      if (error) {
-        console.error('Error al actualizar fecha:', error);
-        alert('No se pudo actualizar la fecha en Supabase.');
-      } else {
-        await fetchGames();
-      }
+      const { error } = await supabaseClient.from('juegos').update({ last_played: newDate }).eq('id', id);
+      if (!error) await fetchGames();
     }
 
-    // Insertar un juego nuevo en Supabase
     gameForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      
       const newGame = {
         title: document.getElementById('title').value,
         image: document.getElementById('image').value,
@@ -221,43 +283,24 @@
       submitBtn.innerText = 'Guardando...';
       setLoading(true);
 
-      const { error } = await supabaseClient
-        .from('juegos')
-        .insert([newGame]);
-
+      const { error } = await supabaseClient.from('juegos').insert([newGame]);
       submitBtn.disabled = false;
       submitBtn.innerText = 'Guardar Juego';
 
-      if (error) {
-        console.error('Error al insertar juego:', error);
-        alert('No se pudo agregar el juego.');
-        setLoading(false);
-      } else {
+      if (!error) {
         gameForm.reset();
         await fetchGames();
       }
     });
 
-    // Eliminar un juego en Supabase
     async function deleteGame(id) {
-      if (confirm('¿Seguro que deseas eliminar este juego de la base de datos?')) {
+      if (confirm('¿Seguro que deseas eliminar este juego?')) {
         setLoading(true);
-        const { error } = await supabaseClient
-          .from('juegos')
-          .delete()
-          .eq('id', id);
-
-        if (error) {
-          console.error('Error al eliminar juego:', error);
-          alert('No se pudo eliminar el juego.');
-          setLoading(false);
-        } else {
-          await fetchGames();
-        }
+        const { error } = await supabaseClient.from('juegos').delete().eq('id', id);
+        if (!error) await fetchGames();
       }
     }
 
-    // Inicializar carga de datos al abrir la página
     fetchGames();
   </script>
 </body>
