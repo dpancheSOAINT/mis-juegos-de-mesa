@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dominion - Contador de Turno</title>
+  <style>
+    :root {
+      --bg-color: #1a1612;
+      --card-bg: #2a221b;
+      --border-color: #c5a059;
+      --accent-color: #e5b95c;
+      --text-color: #f3ebd9;
+      --btn-minus: #8b2626;
+      --btn-plus: #2b7a3e;
+      --btn-reset: #a66a1a;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Georgia', 'Times New Roman', serif;
+      user-select: none; /* Evita que se seleccione texto al presionar rápido los botones */
+      -webkit-user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 15px;
+    }
+
+    /* Banner del Logo */
+    .banner-container {
+      width: 100%;
+      max-width: 500px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .banner-placeholder {
+      width: 100%;
+      height: 120px;
+      background: linear-gradient(135deg, #2c2219, #4a3828);
+      border: 3px solid var(--border-color);
+      border-radius: 12px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+    }
+
+    .banner-placeholder img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .banner-text {
+      color: var(--accent-color);
+      font-size: 1.2rem;
+      font-weight: bold;
+      letter-spacing: 2px;
+      text-shadow: 1px 1px 3px #000;
+    }
+
+    /* Contenedor de Contadores */
+    .counters-container {
+      width: 100%;
+      max-width: 500px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+
+    /* Tarjetas/Casillas */
+    .counter-card {
+      background-color: var(--card-bg);
+      border: 2px solid var(--border-color);
+      border-radius: 10px;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+      position: relative;
+    }
+
+    .counter-title {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: var(--accent-color);
+      margin-bottom: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      text-shadow: 1px 1px 2px #000;
+    }
+
+    /* Controladores (Botones y Valor) */
+    .controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .btn {
+      width: 55px;
+      height: 55px;
+      border: 2px solid var(--border-color);
+      border-radius: 50%;
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: #fff;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+      transition: transform 0.1s, filter 0.2s;
+    }
+
+    .btn:active {
+      transform: scale(0.92);
+    }
+
+    .btn-minus {
+      background-color: var(--btn-minus);
+    }
+
+    .btn-plus {
+      background-color: var(--btn-plus);
+    }
+
+    .value-display {
+      font-size: 2.8rem;
+      font-weight: bold;
+      width: 80px;
+      text-align: center;
+      color: #fff;
+      text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8);
+    }
+
+    /* Botón Nuevo Turno */
+    .reset-container {
+      width: 100%;
+      max-width: 500px;
+      margin-top: 25px;
+    }
+
+    .btn-reset {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(180deg, #c5a059, #8c6827);
+      color: #1a1612;
+      border: 2px solid #fff;
+      border-radius: 8px;
+      font-size: 1.3rem;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      cursor: pointer;
+      box-shadow: 0 6px 15px rgba(0, 0, 0, 0.5);
+      transition: transform 0.1s, filter 0.2s;
+    }
+
+    .btn-reset:active {
+      transform: scale(0.97);
+      filter: brightness(1.1);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Sección del Banner / Logo -->
+  <header class="banner-container">
+    <div class="banner-placeholder">
+      <!-- Si tienes una imagen del logo, reemplaza 'src=""' por la ruta de tu imagen -->
+      <!-- Ejemplo: <img src="logo-dominion.png" alt="Dominion Logo"> -->
+      <span class="banner-text">DOMINION</span>
+    </div>
+  </header>
+
+  <!-- Sección Principal de Contadores -->
+  <main class="counters-container">
+
+    <!-- Acciones -->
+    <article class="counter-card">
+      <h2 class="counter-title">Acciones</h2>
+      <div class="controls">
+        <button class="btn btn-minus" onclick="changeValue('actions', -1)" aria-label="Restar acción">-</button>
+        <span class="value-display" id="actions-val">1</span>
+        <button class="btn btn-plus" onclick="changeValue('actions', 1)" aria-label="Sumar acción">+</button>
+      </div>
+    </article>
+
+    <!-- Compras -->
+    <article class="counter-card">
+      <h2 class="counter-title">Compras</h2>
+      <div class="controls">
+        <button class="btn btn-minus" onclick="changeValue('buys', -1)" aria-label="Restar compra">-</button>
+        <span class="value-display" id="buys-val">1</span>
+        <button class="btn btn-plus" onclick="changeValue('buys', 1)" aria-label="Sumar compra">+</button>
+      </div>
+    </article>
+
+    <!-- Money -->
+    <article class="counter-card">
+      <h2 class="counter-title">Money</h2>
+      <div class="controls">
+        <button class="btn btn-minus" onclick="changeValue('money', -1)" aria-label="Restar money">-</button>
+        <span class="value-display" id="money-val">0</span>
+        <button class="btn btn-plus" onclick="changeValue('money', 1)" aria-label="Sumar money">+</button>
+      </div>
+    </article>
+
+  </main>
+
+  <!-- Botón Nuevo Turno -->
+  <footer class="reset-container">
+    <button class="btn-reset" onclick="resetTurn()">Nuevo Turno</button>
+  </footer>
+
+  <script>
+    // Valores iniciales
+    const INITIAL_STATE = {
+      actions: 1,
+      buys: 1,
+      money: 0
+    };
+
+    // Estado actual de la partida
+    let state = { ...INITIAL_STATE };
+
+    const MIN_VAL = 0;
+    const MAX_VAL = 40;
+
+    // Función para modificar valores dentro de los límites (0 a 40)
+    function changeValue(key, delta) {
+      const newValue = state[key] + delta;
+      
+      if (newValue >= MIN_VAL && newValue <= MAX_VAL) {
+        state[key] = newValue;
+        updateUI(key);
+      }
+    }
+
+    // Actualiza el texto en la pantalla
+    function updateUI(key) {
+      document.getElementById(`${key}-val`).textContent = state[key];
+    }
+
+    // Reinicia todas las variables a su estado inicial
+    function resetTurn() {
+      state = { ...INITIAL_STATE };
+      updateUI('actions');
+      updateUI('buys');
+      updateUI('money');
+    }
+  </script>
+</body>
+</html>
